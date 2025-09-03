@@ -10,28 +10,22 @@ void main() {
 enum Operation { sum, minus, times, divide }
 
 class Calculator {
+
   ///caso seja necessario alterar esse valor, nao esqueça de alterar tambem as expressoes
   ///regex e certifique-se de que o novo valor nao va dar conflito com as expressoes.
   final _minusSafeOperator = "~";
 
   String evaluateExpression(String f) {
 
-    final notResult = RegExp(r'[0-9]+[-+*/][0-9]+');
+    final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
+
+    /// encontra operadores '-' unarios pra substituir por um operador de subitração seguro
     final regexUnaryMinus = RegExp(r'(?<![\d\)])-(?=\s*(?:\d|\())');
+    String newFormula = f.replaceAllMapped(   regexUnaryMinus, (_) => _minusSafeOperator);
 
-    String formula = f.replaceAllMapped(regexUnaryMinus, (_) => '~');
-
-    var newFormula = formula;
-    var hasCalcsToDo = true;
     do {
       newFormula = calculateFormula(newFormula);
-      /*      hasCalcsToDo =
-          (newFormula.contains("+") ||
-          newFormula.contains("-") ||
-          newFormula.contains("*") ||
-          newFormula.contains("/"));*/
-      hasCalcsToDo = notResult.hasMatch(newFormula);
-    } while (hasCalcsToDo);
+    } while (resultCheckerRegex.hasMatch(newFormula));
 
     return newFormula;
   }
