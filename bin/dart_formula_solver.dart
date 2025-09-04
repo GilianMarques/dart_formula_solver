@@ -7,6 +7,7 @@ void main() {
 }
 
 void testSingleFormula() {
+  //final formula = "2+9*5/2-4*3*5";
   final formula = "((-49/28/44/-39)-(47*-48)*15)";
   var result = Calculator().evaluateExpression(formula);
   print("\n result: $result");
@@ -18,6 +19,138 @@ void testAllFormulas() {
     var result = Calculator().evaluateExpression(formula);
     print("\n result: $result answer: $answer index $index formula: $formula");
   });
+}
+
+class Calculator {
+
+  ///caso seja necessario alterar esse valor, nao esqueça de alterar tambem as expressoes
+  ///regex e certifique-se de que o novo valor nao va dar conflito com as expressoes.
+  final _minusSafeOperator = "~";
+
+  String evaluateExpression(String f) {
+    print(f);
+
+    /// Esta expressão regular é usada para verificar se uma string representa uma expressão matemática
+    /// que ainda precisa ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
+    /// Enquanto essa expressão encontrar correspondências na fórmula, significa que ainda há cálculos pendentes.
+    final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
+
+    /// encontra operadores '-' unarios pra substituir por um operador de subitração seguro
+    final regexUnaryMinus = RegExp(r'(?<![\d\)])-(?=\s*(?:\d|\())');
+    String newFormula = f.replaceAllMapped(   regexUnaryMinus, (_) => _minusSafeOperator);
+
+    do {
+      newFormula = calculateFormula(newFormula);
+    } while (resultCheckerRegex.hasMatch(newFormula));
+
+    return newFormula.replaceAll(_minusSafeOperator, "-");
+  }
+
+  String calculateFormula(String formula) {
+
+    print("processing:  $formula");
+
+    RegExpMatch? parenthesesMatch = getMatch(r'\(([^()]+)\)', formula);
+    if (parenthesesMatch != null) {
+      final result = solveAll(parenthesesMatch.group(1)!);
+      return updateFormula(parenthesesMatch, result, formula);
+    }
+    return solveAll(formula);
+  }
+
+  String solveAll(String formula) {
+    print("processing ():  $formula");
+
+    /// Regex para detectar operações de multiplicação e divisão.
+    /// São dois padrões separados por um operador 'ou':
+    /// - Se o primeiro padrão corresponder, os 3 primeiros grupos são preenchidos.
+    /// - Se o segundo padrão corresponder, os 3 grupos seguintes são preenchidos.
+    /// Uma função separada verifica quais grupos têm resultados e extrai operador e operandos.
+    final timesAndDivRegex = RegExp(r'([.,\d~]+)(\*)([.,\d~]+)|([.,\d~]+)(/)([.,\d~]+)');
+    final timesAndDivOperations = timesAndDivRegex.allMatches(formula);
+
+    if (timesAndDivOperations.isNotEmpty) {
+      var match = timesAndDivOperations.first;
+
+      String getMatch(String? option1, String? option2) {
+        String value = option1 ?? option2!;
+        return applyMinusSafeOperator(value);
+      }
+
+      var val1 = getMatch(match.group(1), match.group(4));
+      var op = getMatch(match.group(2), match.group(5));
+      var val2 = getMatch(match.group(3), match.group(6));
+
+      final result = evaluateFraction(
+          double.parse(val1), op, double.parse(val2)
+      );
+
+      final newFormula = updateFormula(match, result, formula);
+      return solveAll(newFormula);
+    }
+
+
+    final sumAndSubRegex = RegExp(r'([.,\d~]+)(\+)([.,\d~]+)|([.,\d~]+)(-)([.,\d~]+)');
+    final sumAndSubOperations = sumAndSubRegex.allMatches(formula);
+
+    if (sumAndSubOperations.isNotEmpty) {
+      var match = sumAndSubOperations.first;
+
+      String getMatch(String? option1, String? option2) {
+        String value = option1 ?? option2!;
+        return applyMinusSafeOperator(value);
+      }
+
+      var val1 = getMatch(match.group(1), match.group(4));
+      var op = getMatch(match.group(2), match.group(5));
+      var val2 = getMatch(match.group(3), match.group(6));
+
+      final result = evaluateFraction(
+          double.parse(val1), op, double.parse(val2)
+      );
+
+      final newFormula = updateFormula(match, result, formula);
+      return solveAll(newFormula);
+    }
+
+    return formula;
+  }
+
+  String updateFormula(RegExpMatch match, String result, String formula) {
+    var beforeMatch = formula.substring(0, match.start);
+    var afterMatch = formula.substring(match.end);
+    return "$beforeMatch$result$afterMatch";
+  }
+
+  RegExpMatch? getMatch(String regexPattern, String formula) {
+    final regex = RegExp(regexPattern);
+    final matches = regex.allMatches(formula);
+    final match = matches.firstOrNull;
+
+    return match;
+  }
+
+  String evaluateFraction(double val1, String op, double val2) {
+
+    var result = 0.0;
+    switch (op) {
+      case "+":
+        result = val1 + val2;
+      case "-":
+        result = val1 - val2;
+      case "*":
+        result = val1 * val2;
+      case "/":
+        result = val1 / val2;
+    }
+    return result.toString().replaceAll("-", _minusSafeOperator);
+  }
+
+
+  String applyMinusSafeOperator(String target) {
+    return target.replaceAll(_minusSafeOperator, "-");
+  }
+
 }
 
 List<(String, String)> getTestFormulas() {
@@ -1162,116 +1295,6 @@ List<(String, String)> getTestFormulas() {
     ("(-39/-17/(-13*30))", "-0,005882353"),
     ("(19*-23+25+13/(-15*13/-29))", "-410,0666667"),
   ];
-}
-
-enum Operation { sum, minus, times, divide }
-
-class Calculator {
-
-  ///caso seja necessario alterar esse valor, nao esqueça de alterar tambem as expressoes
-  ///regex e certifique-se de que o novo valor nao va dar conflito com as expressoes.
-  final _minusSafeOperator = "~";
-
-  String evaluateExpression(String f) {
-    print(f);
-
-    /// Esta expressão regular é usada para verificar se uma string representa uma expressão matemática
-    /// que ainda precisa ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
-    /// Enquanto essa expressão encontrar correspondências na fórmula, significa que ainda há cálculos pendentes.
-    final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
-
-    /// encontra operadores '-' unarios pra substituir por um operador de subitração seguro
-    final regexUnaryMinus = RegExp(r'(?<![\d\)])-(?=\s*(?:\d|\())');
-    String newFormula = f.replaceAllMapped(   regexUnaryMinus, (_) => _minusSafeOperator);
-
-    do {
-      newFormula = calculateFormula(newFormula);
-    } while (resultCheckerRegex.hasMatch(newFormula));
-
-    return newFormula.replaceAll(_minusSafeOperator, "-");
-  }
-
-  String calculateFormula(String formula) {
-
-    print("processing:  $formula");
-
-    RegExpMatch? parenthesesMatch = getMatch(r'\(([^()]+)\)', formula);
-    if (parenthesesMatch != null) {
-      final matches = parenthesesMatch;
-      final result = calculateFormula(matches.group(1)!);
-      return updateFormula(matches, result, formula);
-    }
-
-    var timesMatches = getMatch(r'([.,\d~]+)\*([.,\d~]+)', formula);
-    if (timesMatches != null) {
-      var (val1, val2) = getValuesFromMatch(timesMatches);
-      return evaluateFraction(Operation.times, val1, val2);
-    }
-
-    var divideMatches = getMatch(r'([.,\d~]+)/([.,\d~]+)', formula);
-    if (divideMatches != null) {
-      var (val1, val2) = getValuesFromMatch(divideMatches);
-      return evaluateFraction(Operation.divide, val1, val2);
-    }
-
-    var sumMatches = getMatch(r'([.,\d~]+)\+([.,\d~]+)', formula);
-    if (sumMatches != null) {
-      var (val1, val2) = getValuesFromMatch(sumMatches);
-      return evaluateFraction(Operation.sum, val1, val2);
-    }
-
-    var minusMatches = getMatch(r'([.,\d~]+)-([.,\d~]+)', formula);
-    if (minusMatches != null) {
-      var (val1, val2) = getValuesFromMatch(minusMatches);
-      return evaluateFraction(Operation.minus, val1, val2);
-    }
-
-    return formula;
-  }
-
-  String updateFormula(RegExpMatch match, String result, String formula) {
-    var beforeMatch = formula.substring(0, match.start);
-    var afterMatch = formula.substring(match.end);
-    return "$beforeMatch$result$afterMatch";
-  }
-
-  RegExpMatch? getMatch(String regexPattern, String formula) {
-    final regex = RegExp(regexPattern);
-    final matches = regex.allMatches(formula);
-    final match = matches.firstOrNull;
-
-    return match;
-  }
-
-  String evaluateFraction(Operation op, String sVal1, String sVal2) {
-
-    var val1 = double.parse(sVal1);
-    var val2 = double.parse(sVal2);
-
-    var result = 0.0;
-    switch (op) {
-      case Operation.sum:
-        result = val1 + val2;
-      case Operation.minus:
-        result = val1 - val2;
-      case Operation.times:
-        result = val1 * val2;
-      case Operation.divide:
-        result = val1 / val2;
-    }
-    return result.toString().replaceAll("-", _minusSafeOperator);
-  }
-
-  (String, String) getValuesFromMatch(RegExpMatch matches) {
-    var val1 = matches.group(1).toString();
-    var val2 = matches.group(2).toString();
-    return (applyMinusSafeOperator(val1), applyMinusSafeOperator(val2));
-  }
-
-  String applyMinusSafeOperator(String target) {
-    return target.replaceAll(_minusSafeOperator, "-");
-  }
-
 }
 
 extension Let<T> on T {
