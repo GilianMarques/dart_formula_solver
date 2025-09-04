@@ -110,61 +110,27 @@ class Calculator {
     final match = matches.firstOrNull;
 
     if (match != null) {
-      final result = evaluateFormula(match.group(1)!);
+      final result = resolveFormulaSteps(match.group(1)!);
       return updateFormula(match, result, formula);
     }
-    return evaluateFormula(formula);
+    return resolveFormulaSteps(formula);
   }
 
-  String evaluateFormula(String formula) {
+  String resolveFormulaSteps(String formula) {
     print("processing ():  $formula");
 
     final timesAndDivOperations = timesAndDivRegex.allMatches(formula);
 
     if (timesAndDivOperations.isNotEmpty) {
       var match = timesAndDivOperations.first;
-
-      String getMatch(String? option1, String? option2) {
-        String value = option1 ?? option2!;
-        return applyMinusSafeOperator(value);
-      }
-
-      var val1 = getMatch(match.group(1), match.group(4));
-      var op = getMatch(match.group(2), match.group(5));
-      var val2 = getMatch(match.group(3), match.group(6));
-
-      final result = evaluateFraction(
-        double.parse(val1),
-        op,
-        double.parse(val2),
-      );
-
-      final newFormula = updateFormula(match, result, formula);
-      return evaluateFormula(newFormula);
+      return evaluate(formula, match);
     }
 
     final sumAndSubOperations = sumAndSubRegex.allMatches(formula);
 
     if (sumAndSubOperations.isNotEmpty) {
       var match = sumAndSubOperations.first;
-
-      String getMatch(String? option1, String? option2) {
-        String value = option1 ?? option2!;
-        return applyMinusSafeOperator(value);
-      }
-
-      var val1 = getMatch(match.group(1), match.group(4));
-      var op = getMatch(match.group(2), match.group(5));
-      var val2 = getMatch(match.group(3), match.group(6));
-
-      final result = evaluateFraction(
-        double.parse(val1),
-        op,
-        double.parse(val2),
-      );
-
-      final newFormula = updateFormula(match, result, formula);
-      return evaluateFormula(newFormula);
+      return evaluate(formula, match);
     }
 
     return formula;
@@ -207,6 +173,25 @@ class Calculator {
 
   String applyMinusSafeOperator(String target) {
     return target.replaceAll(_minusSafeOperator, "-");
+  }
+
+  /// Avalia as operações basicas da formula, delegando o calculo de forma
+  /// a respeitar a precedencia das operações matematicas.
+  String evaluate(String formula, RegExpMatch match) {
+    /// Identifica qual dos dois valores esta preenchido
+    String getMatch(String? option1, String? option2) {
+      String value = option1 ?? option2!;
+      return applyMinusSafeOperator(value);
+    }
+
+    var val1 = getMatch(match.group(1), match.group(4));
+    var op = getMatch(match.group(2), match.group(5));
+    var val2 = getMatch(match.group(3), match.group(6));
+
+    final result = evaluateFraction(double.parse(val1), op, double.parse(val2));
+
+    final newFormula = updateFormula(match, result, formula);
+    return resolveFormulaSteps(newFormula);
   }
 }
 
