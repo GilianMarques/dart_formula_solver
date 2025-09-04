@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:decimal/decimal.dart';
 
 void main() {
   // testAllFormulas();
@@ -36,7 +37,7 @@ class Calculator {
     final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
 
     /// encontra operadores '-' unarios pra substituir por um operador de subitração seguro
-    final regexUnaryMinus = RegExp(r'(?<![\d\)])-(?=\s*(?:\d|\())');
+    final regexUnaryMinus = RegExp(r'(?<![\d)])-(?=\s*(?:\d|\())');
     String newFormula = f.replaceAllMapped(   regexUnaryMinus, (_) => _minusSafeOperator);
 
     do {
@@ -130,9 +131,11 @@ class Calculator {
     return match;
   }
 
-  String evaluateFraction(double val1, String op, double val2) {
+  String evaluateFraction(double v1, String op, double v2) {
+    final val1 = Decimal.parse("$v1");
+    final val2 = Decimal.parse("$v2");
 
-    var result = 0.0;
+    var result = Decimal.zero;
     switch (op) {
       case "+":
         result = val1 + val2;
@@ -141,7 +144,7 @@ class Calculator {
       case "*":
         result = val1 * val2;
       case "/":
-        result = val1 / val2;
+        result = val1 / val2; //https://chatgpt.com/share/68b96d21-c9a8-8001-8450-1b2860289018
     }
     return result.toString().replaceAll("-", _minusSafeOperator);
   }
