@@ -37,49 +37,88 @@ void testAllFormulas() {
 }
 
 class Calculator {
-  ///caso seja necessario alterar esse valor, nao esqueça de alterar tambem as expressoes
-  ///regex e certifique-se de que o novo valor nao va dar conflito com as expressoes.
+  /// Caso seja necessario alterar esse valor, nao esqueça de alterar tambem as expressoes
+  /// regex e certifique-se de que o novo valor nao vá dar conflito com as expressoes.
   final _minusSafeOperator = "~";
 
-  String evaluateExpression(String f) {
-    print(f);
+  /// Verifica se uma string representa uma expressão matemática que ainda precisa
+  /// ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
+  /// Enquanto essa expressão encontrar correspondências na fórmula, significa que ainda há cálculos pendentes.
+  final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
 
-    /// Esta expressão regular é usada para verificar se uma string representa uma expressão matemática
-    /// que ainda precisa ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
-    /// Enquanto essa expressão encontrar correspondências na fórmula, significa que ainda há cálculos pendentes.
-    final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
+  /// Obtem as expressões entre parênteses, de dentro pra fora.
+  final parenthesesMatch = RegExp(r'\(([^()]+)\)');
 
-    String newFormula = prepareFormula(f);
+  /// Regex para detectar operações de multiplicação e divisão.
+  /// identifica e encapsula em grupos os operandos o operador.
+  /// São dois padrões separados por um operador 'ou':
+  /// - Se o primeiro padrão corresponder, os 3 primeiros grupos são preenchidos.
+  /// - Se o segundo padrão corresponder, os 3 grupos seguintes são preenchidos.
+  /// Uma função separada verifica quais grupos têm resultados e extrai operador e operandos.
+  final timesAndDivRegex = RegExp(
+    r'([.,\d~]+)(\*)([.,\d~]+)|([.,\d~]+)(/)([.,\d~]+)',
+  );
+
+  /// Atua da exata mesma maneira que `timesAndDivRegex`, mas com subtração e adição.
+  final sumAndSubRegex = RegExp(
+    r'([.,\d~]+)(\+)([.,\d~]+)|([.,\d~]+)(-)([.,\d~]+)',
+  );
+
+  /// Recebe uma formula e retorna um resultado.
+  String evaluateExpression(String rawFormula) {
+    String formula = prepareFormula(rawFormula);
 
     do {
-      newFormula = calculateFormula(newFormula);
-    } while (resultCheckerRegex.hasMatch(newFormula));
+      formula = resolveParentheses(formula);
+    } while (resultCheckerRegex.hasMatch(formula));
 
-    return newFormula.replaceAll(_minusSafeOperator, "-");
+    return formula.replaceAll(_minusSafeOperator, "-");
   }
 
-  String calculateFormula(String formula) {
+  /// Prepara a fórmula para avaliação.
+  ///
+  /// Remove espaços e substitui operadores unários de menos (`-`)
+  /// pelo `_minusSafeOperator` para evitar conflitos com a subtração.
+  ///
+  /// É necessário remover os espaços em branco antes de substituir os unários
+  /// caso contrário ocorrem erros de identificação.
+  ///
+  /// A regex `[regexUnaryMinus]` identifica `-` unários que não são precedidos
+  /// por dígito/parêntese de fechamento e são seguidos por dígito/parêntese de abertura.
+  /// [f] é a string da fórmula bruta a ser transformada.
+  ///
+  /// Retorna a string da fórmula transformada, pronta para avaliação.
+  String prepareFormula(String f) {
+    final regexUnaryMinus = RegExp(r'(?<![\d)])-(?=\s*(?:\d|\())');
+    var normalizedF = f.replaceAll(" ", "");
+
+    return normalizedF.replaceAllMapped(
+      regexUnaryMinus,
+      (_) => _minusSafeOperator,
+    );
+  }
+
+  /// Resolve expressões dentro de parênteses recursivamente.
+  /// Identifica a primeira expressão entre parênteses, resolve-a chamando `solveAll`,
+  /// e substitui a expressão original pelo resultado, continuando até não haver mais parênteses.
+  /// Havendo parênteses aninhados, captura o par mais fundo na cadeia de expressões, e resolve de dentro pra fora.
+  /// Caso não hajam parênteses, chama `solveAll` para resolver a expressão..
+  String resolveParentheses(String formula) {
     print("processing:  $formula");
 
-    RegExpMatch? parenthesesMatch = getMatch(r'\(([^()]+)\)', formula);
-    if (parenthesesMatch != null) {
-      final result = solveAll(parenthesesMatch.group(1)!);
-      return updateFormula(parenthesesMatch, result, formula);
+    final matches = parenthesesMatch.allMatches(formula);
+    final match = matches.firstOrNull;
+
+    if (match != null) {
+      final result = evaluateFormula(match.group(1)!);
+      return updateFormula(match, result, formula);
     }
-    return solveAll(formula);
+    return evaluateFormula(formula);
   }
 
-  String solveAll(String formula) {
+  String evaluateFormula(String formula) {
     print("processing ():  $formula");
 
-    /// Regex para detectar operações de multiplicação e divisão.
-    /// São dois padrões separados por um operador 'ou':
-    /// - Se o primeiro padrão corresponder, os 3 primeiros grupos são preenchidos.
-    /// - Se o segundo padrão corresponder, os 3 grupos seguintes são preenchidos.
-    /// Uma função separada verifica quais grupos têm resultados e extrai operador e operandos.
-    final timesAndDivRegex = RegExp(
-      r'([.,\d~]+)(\*)([.,\d~]+)|([.,\d~]+)(/)([.,\d~]+)',
-    );
     final timesAndDivOperations = timesAndDivRegex.allMatches(formula);
 
     if (timesAndDivOperations.isNotEmpty) {
@@ -101,12 +140,9 @@ class Calculator {
       );
 
       final newFormula = updateFormula(match, result, formula);
-      return solveAll(newFormula);
+      return evaluateFormula(newFormula);
     }
 
-    final sumAndSubRegex = RegExp(
-      r'([.,\d~]+)(\+)([.,\d~]+)|([.,\d~]+)(-)([.,\d~]+)',
-    );
     final sumAndSubOperations = sumAndSubRegex.allMatches(formula);
 
     if (sumAndSubOperations.isNotEmpty) {
@@ -128,7 +164,7 @@ class Calculator {
       );
 
       final newFormula = updateFormula(match, result, formula);
-      return solveAll(newFormula);
+      return evaluateFormula(newFormula);
     }
 
     return formula;
@@ -171,17 +207,6 @@ class Calculator {
 
   String applyMinusSafeOperator(String target) {
     return target.replaceAll(_minusSafeOperator, "-");
-  }
-
-  String prepareFormula(String f) {
-    /// encontra operadores '-' unarios pra substituir por um operador de subitração seguro
-    final regexUnaryMinus = RegExp(r'(?<![\d)])-(?=\s*(?:\d|\())');
-    // precisa remover espaçoes senao da erro pra substituir os operadores - unarios
-    var normalizedF = f.replaceAll(" ", "");
-    return normalizedF.replaceAllMapped(
-      regexUnaryMinus,
-      (_) => _minusSafeOperator,
-    );
   }
 }
 
