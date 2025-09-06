@@ -39,7 +39,7 @@ void testAllFormulas() {
 class Calculator {
   /// Caso seja necessario alterar esse valor, nao esqueça de alterar tambem as expressoes
   /// regex e certifique-se de que o novo valor nao vá dar conflito com as expressoes.
-  final _minusSafeOperator = "~";
+  static const _minusSafeOperator = "~";
 
   /// Verifica se uma string representa uma expressão matemática que ainda precisa
   /// ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
@@ -64,7 +64,7 @@ class Calculator {
     r'([.,\d~]+)(\+)([.,\d~]+)|([.,\d~]+)(-)([.,\d~]+)',
   );
 
-  /// Recebe uma formula e retorna um resultado.
+  /// Recebe uma formula e retorna seu resultado.
   String evaluateExpression(String rawFormula) {
     String formula = prepareFormula(rawFormula);
 
@@ -72,7 +72,7 @@ class Calculator {
       formula = resolveParentheses(formula);
     } while (resultCheckerRegex.hasMatch(formula));
 
-    return formula.replaceAll(_minusSafeOperator, "-");
+    return formula.withoutMinusSafeOp();
   }
 
   /// Prepara a fórmula para avaliação.
@@ -83,127 +83,111 @@ class Calculator {
   /// É necessário remover os espaços em branco antes de substituir os unários
   /// caso contrário ocorrem erros de identificação.
   ///
-  /// A regex [[]egexUnaryMinus]` identifica [-`]unários que não são precedidos
+  /// A regex [regexUnaryMinus] identifica [-] unários que não são precedidos
   /// por dígito/parêntese de fechamento e são seguidos por dígito/parêntese de abertura.
   /// [f] é a string da fórmula bruta a ser transformada.
   ///
   /// Retorna a string da fórmula transformada, pronta para avaliação.
   String prepareFormula(String f) {
     final regexUnaryMinus = RegExp(r'(?<![\d)])-(?=\s*(?:\d|\())');
-    var normalizedF = f.replaceAll(" ", "");
+    final regexRemoveSpaces = RegExp(r'\s+');
 
-    return normalizedF.replaceAllMapped(
-      regexUnaryMinus,
-      (_) => _minusSafeOperator,
-    );
+    return f.replaceAll(regexRemoveSpaces, "")
+      .replaceAll(regexUnaryMinus, _minusSafeOperator);
   }
 
-  /// Resolve expressões dentro de parênteses recursivamente.
-  /// Identifica a primeira expressão entre parênteses, resolve-a chamando [resolveFormulaSteps],
-  /// e substitui a expressão original pelo resultado, continuando até não haver mais parênteses.
-  /// Havendo parênteses aninhados, captura o par mais fundo na cadeia de expressões, e resolve de dentro pra fora.
-  /// Caso não hajam parênteses, chama [resolveFormulaSteps] para resolver a expressão..
+  /// Resolve expressões entre parênteses recursivamente.
+  /// Identifica e resolve a primeira expressão entre parênteses (a mais interna em caso de aninhamento)
+  /// usando [processSubExpression]. Substitui a expressão original pelo resultado e repete
+  /// até não haver mais parênteses. Se não houver parênteses, resolve a expressão diretamente.
   String resolveParentheses(String formula) {
     print("processing:  $formula");
 
-    final matches = parenthesesMatch.allMatches(formula);
-    final match = matches.firstOrNull;
+    final insideParenthesesExpressions = parenthesesMatch.allMatches(formula);
+    final expression = insideParenthesesExpressions.firstOrNull;
 
-    if (match != null) {
-      final result = resolveFormulaSteps(match.group(1)!);
-      return updateFormula(match, result, formula);
+    if (expression != null) {
+      final result = processSubExpression(expression.group(1)!);
+      return formula.replaceExpressionByItsResult(expression, result);
     }
-    return resolveFormulaSteps(formula);
+    return processSubExpression(formula);
   }
 
-  /// Identifica as quatro operações básicas na formula e solicita que o calculo
-  /// seja feito respeitando a ordem de precedencia.
-  /// O calculo de cada operação básica é delegado a [calculate]
-  String resolveFormulaSteps(String formula) {
+  /// Resolve a fórmula passo a passo, respeitando a ordem de precedência.
+  /// Primeiro multiplicações/divisões, depois somas/subtrações.
+  /// Utiliza recursão para simplificar a fórmula até restar apenas o resultado.
+  String processSubExpression(String formula) {
     print("processing ():  $formula");
 
-    final timesAndDivOperations = timesAndDivRegex.allMatches(formula);
+    var matches = timesAndDivRegex.allMatches(formula);
+    if (matches.isEmpty) matches = sumAndSubRegex.allMatches(formula);
+    if (matches.isEmpty) return formula;
 
-    if (timesAndDivOperations.isNotEmpty) {
-      var match = timesAndDivOperations.first;
-      return calculate(formula, match);
-    }
+    var match = matches.first;
 
-    final sumAndSubOperations = sumAndSubRegex.allMatches(formula);
+    var val1 = match.group(1) ?? match.group(4)!;
+    var op = match.group(2) ?? match.group(5)!;
+    var val2 = match.group(3) ?? match.group(6)!;
 
-    if (sumAndSubOperations.isNotEmpty) {
-      var match = sumAndSubOperations.first;
-      return calculate(formula, match);
-    }
+    final result = performCalculation(val1, op, val2);
 
-    return formula;
+    final newFormula = formula.replaceExpressionByItsResult(match, result);
+    return processSubExpression(newFormula);
   }
 
-  String updateFormula(RegExpMatch match, String result, String formula) {
-    var beforeMatch = formula.substring(0, match.start);
-    var afterMatch = formula.substring(match.end);
+  /// Realiza o cálculo entre dois valores [v1] e [v2] com base no [op]erador.
+  /// Usa BigDecimal para precisão e trata o [_minusSafeOperator].
+  /// Retorna o resultado como string, também com o [_minusSafeOperator] se necessário.
+  String performCalculation(String v1, String op, String v2) {
+    final val1 = BigDecimal.parse(v1.withoutMinusSafeOp());
+    final val2 = BigDecimal.parse(v2.withoutMinusSafeOp());
+
+    return (switch (op) {
+      "+" => val1 + val2,
+      "-" => val1 - val2,
+      "*" => val1 * val2,
+      "/" => val1.divide(val2, roundingMode: RoundingMode.UP, scale: 10),
+      _ => throw Exception("Invalid operator: $op"),
+    }).toString().withMinusSafeOp();
+  }
+
+}
+
+extension on String {
+  /// substitui operador unario de menos por um operador seguro ([_minusSafeOperator])
+  /// quando houver algum, para evitar conflitos com a subtração.
+  String withMinusSafeOp() => replaceAll("-", Calculator._minusSafeOperator);
+
+  /// substitui operador seguro ([_minusSafeOperator]) por um operador unario de menos
+  /// quando houver algum.
+  ///
+  String withoutMinusSafeOp() => replaceAll(Calculator._minusSafeOperator, "-");
+
+  /// Substitui uma subexpressão (identificada por `match`) dentro de uma fórmula maior
+  /// pelo seu resultado (`result`).
+  ///
+  /// Por exemplo, se a fórmula for "2+3*4-1" e a subexpressão `match` for "3*4"
+  /// (começando no índice 2 e terminando no índice 5), e o `result` for "12",
+  /// este mét.odo retornará "2+12-1".
+  ///
+  /// Parâmetros:
+  ///   - `match`: Um objeto `RegExpMatch` que representa a subexpressão a ser substituída.
+  ///              `match.start` indica o índice inicial da subexpressão na string original.
+  ///              `match.end` indica o índice final (exclusive) da subexpressão.
+  ///   - `result`: A string que representa o resultado calculado da subexpressão `match`.
+  ///
+  /// @Retorna:
+  ///   Uma nova string onde a subexpressão original foi substituída pelo seu resultado.
+  String replaceExpressionByItsResult(RegExpMatch match, String result) {
+    var beforeMatch = substring(0, match.start);
+    var afterMatch = substring(match.end);
     return "$beforeMatch$result$afterMatch";
   }
-
-  RegExpMatch? getMatch(String regexPattern, String formula) {
-    final regex = RegExp(regexPattern);
-    final matches = regex.allMatches(formula);
-    final match = matches.firstOrNull;
-
-    return match;
-  }
-
-  String applyMinusSafeOperator(String target) {
-    return target.replaceAll(_minusSafeOperator, "-");
-  }
-
-  /// Avalia as operações basicas da formula, delegando o calculo de forma
-  /// a respeitar a precedencia das operações matematicas.
-  String calculate(String formula, RegExpMatch match) {
-
-    /// Identifica qual dos dois valores esta preenchido
-    String getMatch(String? option1, String? option2) {
-      String value = option1 ?? option2!;
-      return applyMinusSafeOperator(value);
-    }
-
-    var val1 = getMatch(match.group(1), match.group(4));
-    var op = getMatch(match.group(2), match.group(5));
-    var val2 = getMatch(match.group(3), match.group(6));
-
-    final result = evaluateFraction(double.parse(val1), op, double.parse(val2));
-
-    final newFormula = updateFormula(match, result, formula);
-    return resolveFormulaSteps(newFormula);
-  }
-
-  String evaluateFraction(double v1, String op, double v2) {
-    final val1 = BigDecimal.parse("$v1");
-    final val2 = BigDecimal.parse("$v2");
-
-    var result = BigDecimal.parse("0");
-    switch (op) {
-      case "+":
-        result = val1 + val2;
-      case "-":
-        result = val1 - val2;
-      case "*":
-        result = val1 * val2;
-      case "/":
-        result = val1.divide(val2, roundingMode: RoundingMode.UP, scale: 10);
-
-      default:
-        throw Exception("Invalid operator: $op");
-    }
-    return result.toString().replaceAll("-", _minusSafeOperator);
-  }
-
-
 }
 
 List<(String, String)> getTestFormulas() {
   return [
-    ("((45+(-36/22)) * (23-60)) - (24/-36)", "-1603.7878787879"),
+    ("  ((45+(-3 6/22)) * (2  3   -60)) - (24/-3  6)", "-1603.7878787879"),
     ("((-29/(46 - -10)) * (1 + -32)) - 31", "-14.9464285714"),
     ("(-58*-47) - ((-48 - -46) / -30) * -17", "2727.1333333333"),
     ("((-39*28)+59) - 25/20 * (7 - -20)", "-1066.75"),
@@ -706,6 +690,3 @@ List<(String, String)> getTestFormulas() {
   ];
 }
 
-extension Let<T> on T {
-  R let<R>(R Function(T) func) => func(this);
-}
