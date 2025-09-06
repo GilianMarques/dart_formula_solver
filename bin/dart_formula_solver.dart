@@ -44,12 +44,12 @@ class Calculator {
   /// Verifica se uma string representa uma expressão matemática que ainda precisa
   /// ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
   /// Enquanto essa expressão encontrar correspondências na fórmula, significa que ainda há cálculos pendentes.
-  final resultCheckerRegex = RegExp(r'[-~0-9]+[-+*/][-~0-9]+');
+  final resultCheckerRegex = RegExp(r'[0-9]+[-+*/][-~0-9]+');
 
   /// Obtem as expressões entre parênteses, de dentro pra fora.
   final parenthesesMatch = RegExp(r'\(([^()]+)\)');
 
-  /// Regex para detectar operações de multiplicação e divisão.
+  /// Detecta operações de multiplicação e divisão.
   /// identifica e encapsula em grupos os operandos o operador.
   /// São dois padrões separados por um operador 'ou':
   /// - Se o primeiro padrão corresponder, os 3 primeiros grupos são preenchidos.
@@ -59,7 +59,7 @@ class Calculator {
     r'([.,\d~]+)(\*)([.,\d~]+)|([.,\d~]+)(/)([.,\d~]+)',
   );
 
-  /// Atua da exata mesma maneira que `timesAndDivRegex`, mas com subtração e adição.
+  /// Atua da exata mesma maneira que [timesAndDivRegex], mas com subtração e adição.
   final sumAndSubRegex = RegExp(
     r'([.,\d~]+)(\+)([.,\d~]+)|([.,\d~]+)(-)([.,\d~]+)',
   );
@@ -78,12 +78,12 @@ class Calculator {
   /// Prepara a fórmula para avaliação.
   ///
   /// Remove espaços e substitui operadores unários de menos (`-`)
-  /// pelo `_minusSafeOperator` para evitar conflitos com a subtração.
+  /// pelo [_minusSafeOperator] para evitar conflitos com a subtração.
   ///
   /// É necessário remover os espaços em branco antes de substituir os unários
   /// caso contrário ocorrem erros de identificação.
   ///
-  /// A regex `[regexUnaryMinus]` identifica `-` unários que não são precedidos
+  /// A regex [[]egexUnaryMinus]` identifica [-`]unários que não são precedidos
   /// por dígito/parêntese de fechamento e são seguidos por dígito/parêntese de abertura.
   /// [f] é a string da fórmula bruta a ser transformada.
   ///
@@ -99,10 +99,10 @@ class Calculator {
   }
 
   /// Resolve expressões dentro de parênteses recursivamente.
-  /// Identifica a primeira expressão entre parênteses, resolve-a chamando `solveAll`,
+  /// Identifica a primeira expressão entre parênteses, resolve-a chamando [resolveFormulaSteps],
   /// e substitui a expressão original pelo resultado, continuando até não haver mais parênteses.
   /// Havendo parênteses aninhados, captura o par mais fundo na cadeia de expressões, e resolve de dentro pra fora.
-  /// Caso não hajam parênteses, chama `solveAll` para resolver a expressão..
+  /// Caso não hajam parênteses, chama [resolveFormulaSteps] para resolver a expressão..
   String resolveParentheses(String formula) {
     print("processing:  $formula");
 
@@ -116,6 +116,9 @@ class Calculator {
     return resolveFormulaSteps(formula);
   }
 
+  /// Identifica as quatro operações básicas na formula e solicita que o calculo
+  /// seja feito respeitando a ordem de precedencia.
+  /// O calculo de cada operação básica é delegado a [calculate]
   String resolveFormulaSteps(String formula) {
     print("processing ():  $formula");
 
@@ -123,14 +126,14 @@ class Calculator {
 
     if (timesAndDivOperations.isNotEmpty) {
       var match = timesAndDivOperations.first;
-      return evaluate(formula, match);
+      return calculate(formula, match);
     }
 
     final sumAndSubOperations = sumAndSubRegex.allMatches(formula);
 
     if (sumAndSubOperations.isNotEmpty) {
       var match = sumAndSubOperations.first;
-      return evaluate(formula, match);
+      return calculate(formula, match);
     }
 
     return formula;
@@ -148,6 +151,30 @@ class Calculator {
     final match = matches.firstOrNull;
 
     return match;
+  }
+
+  String applyMinusSafeOperator(String target) {
+    return target.replaceAll(_minusSafeOperator, "-");
+  }
+
+  /// Avalia as operações basicas da formula, delegando o calculo de forma
+  /// a respeitar a precedencia das operações matematicas.
+  String calculate(String formula, RegExpMatch match) {
+
+    /// Identifica qual dos dois valores esta preenchido
+    String getMatch(String? option1, String? option2) {
+      String value = option1 ?? option2!;
+      return applyMinusSafeOperator(value);
+    }
+
+    var val1 = getMatch(match.group(1), match.group(4));
+    var op = getMatch(match.group(2), match.group(5));
+    var val2 = getMatch(match.group(3), match.group(6));
+
+    final result = evaluateFraction(double.parse(val1), op, double.parse(val2));
+
+    final newFormula = updateFormula(match, result, formula);
+    return resolveFormulaSteps(newFormula);
   }
 
   String evaluateFraction(double v1, String op, double v2) {
@@ -171,28 +198,7 @@ class Calculator {
     return result.toString().replaceAll("-", _minusSafeOperator);
   }
 
-  String applyMinusSafeOperator(String target) {
-    return target.replaceAll(_minusSafeOperator, "-");
-  }
 
-  /// Avalia as operações basicas da formula, delegando o calculo de forma
-  /// a respeitar a precedencia das operações matematicas.
-  String evaluate(String formula, RegExpMatch match) {
-    /// Identifica qual dos dois valores esta preenchido
-    String getMatch(String? option1, String? option2) {
-      String value = option1 ?? option2!;
-      return applyMinusSafeOperator(value);
-    }
-
-    var val1 = getMatch(match.group(1), match.group(4));
-    var op = getMatch(match.group(2), match.group(5));
-    var val2 = getMatch(match.group(3), match.group(6));
-
-    final result = evaluateFraction(double.parse(val1), op, double.parse(val2));
-
-    final newFormula = updateFormula(match, result, formula);
-    return resolveFormulaSteps(newFormula);
-  }
 }
 
 List<(String, String)> getTestFormulas() {
