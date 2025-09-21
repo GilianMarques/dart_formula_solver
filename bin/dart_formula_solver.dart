@@ -1,17 +1,27 @@
+import 'dart:io';
+
 import 'package:big_decimal/big_decimal.dart';
 import 'package:collection/collection.dart';
 
 void main() {
-  testAllFormulas();
-  // testSingleFormula();
+  // testAllFormulas();
+  testSingleFormula();
 }
 
 void testSingleFormula() {
   //final formula = "2+9*5/2-4*3*5";
   // final formula = "((-49/28/44/-39)-(47*-48)*15)";
-  final formula = "((-32*0) / (-50 - -2)) + (22 - 48)";
+  // final formula = "((-32*0) / (-50 - -2)) + (22 - 48)"; //ta dando bosta aqui
+
+  print("Insira uma formula:");
+  final formula = stdin.readLineSync() ?? "1+1";
+
   var result = Calculator().evaluateExpression(formula);
   print("\n result: $result");
+
+  while (true) {
+    testSingleFormula();
+  }
 }
 
 void testAllFormulas() {
@@ -44,7 +54,7 @@ class Calculator {
   /// Verifica se uma string representa uma expressão matemática que ainda precisa
   /// ser calculada. Ela procura por um padrão de "operando OPERADOR operando".
   /// Enquanto essa expressão encontrar correspondências na fórmula, significa que ainda há cálculos pendentes.
-  final resultCheckerRegex = RegExp(r'[0-9]+[-+*/][-~0-9]+');
+  final resultCheckerRegex = RegExp(r'[0-9]+[-+*/][-~0-9]+'); //todo bug ao nao considerar numeros negativos no inicio da expressao??
 
   /// Obtem as expressões entre parênteses, de dentro pra fora.
   final parenthesesMatch = RegExp(r'\(([^()]+)\)');
@@ -92,8 +102,9 @@ class Calculator {
     final regexUnaryMinus = RegExp(r'(?<![\d)])-(?=\s*(?:\d|\())');
     final regexRemoveSpaces = RegExp(r'\s+');
 
-    return f.replaceAll(regexRemoveSpaces, "")
-      .replaceAll(regexUnaryMinus, _minusSafeOperator);
+    return f
+        .replaceAll(regexRemoveSpaces, "")
+        .replaceAll(regexUnaryMinus, _minusSafeOperator);
   }
 
   /// Resolve expressões entre parênteses recursivamente.
@@ -150,7 +161,6 @@ class Calculator {
       _ => throw Exception("Invalid operator: $op"),
     }).toString().withMinusSafeOp();
   }
-
 }
 
 extension on String {
@@ -689,4 +699,3 @@ List<(String, String)> getTestFormulas() {
     ("((-14 - 52) - -17) / (-48 + -16) * (-13 - 24)", "-28.328125"),
   ];
 }
-
